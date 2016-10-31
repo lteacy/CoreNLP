@@ -825,7 +825,7 @@ public class StanfordCoreNLPServer implements Runnable {
 
       // Send response
       try {
-        Pair<String, Annotation> response = future.get(5, TimeUnit.SECONDS);
+        Pair<String, Annotation> response = future.get(timeoutMilliseconds, TimeUnit.MILLISECONDS);
         byte[] content = response.first.getBytes();
         Annotation completedAnnotation = response.second;
         sendAndGetResponse(httpExchange, content);
@@ -945,7 +945,7 @@ public class StanfordCoreNLPServer implements Runnable {
 
       // Send response
       try {
-        Pair<String, Annotation> pair = response.get(5, TimeUnit.SECONDS);
+        Pair<String, Annotation> pair = response.get(timeoutMilliseconds, TimeUnit.MILLISECONDS);
         Annotation completedAnnotation = pair.second;
         byte[] content = pair.first.getBytes();
         sendAndGetResponse(httpExchange, content);
@@ -1048,7 +1048,7 @@ public class StanfordCoreNLPServer implements Runnable {
 
       // Send response
       try {
-        Pair<String, Annotation> pair = response.get(5, TimeUnit.SECONDS);
+        Pair<String, Annotation> pair = response.get(timeoutMilliseconds, TimeUnit.MILLISECONDS);
         Annotation completedAnnotation = pair.second;
         byte[] content = pair.first.getBytes();
         sendAndGetResponse(httpExchange, content);
