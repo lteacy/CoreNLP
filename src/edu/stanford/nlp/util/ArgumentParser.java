@@ -98,6 +98,8 @@ public class ArgumentParser  {
   public static Class<?>[] optionClasses = null;
   @Option(name = "threads", gloss = "Number of threads on machine")
   public static int threads = Runtime.getRuntime().availableProcessors();
+  @Option(name="cache", gloss="Maximum documents to store in annotation cache")
+  public static int cache = 50;
   @Option(name = "host", gloss = "Name of computer we are running on")
   public static String host = "(unknown)";
   @SuppressWarnings("FieldCanBeLocal")

@@ -17,6 +17,7 @@ import edu.stanford.nlp.trees.tregex.TregexPattern;
 import edu.stanford.nlp.trees.tregex.TregexMatcher;
 import edu.stanford.nlp.trees.*;
 import edu.stanford.nlp.util.*;
+import edu.stanford.nlp.util.TypesafeMap.Key;
 import edu.stanford.nlp.util.logging.Redwood;
 
 import javax.net.ssl.*;
@@ -88,6 +89,11 @@ public class StanfordCoreNLPServer implements Runnable {
    * An executor to time out CoreNLP execution with.
    */
   private final ExecutorService corenlpExecutor;
+  
+  /**
+   * Annotation Cache to speed up execution of multiple queries against the same text.
+   */
+  private AnnotationCache annotation_cache;
 
 
   /**
@@ -123,6 +129,8 @@ public class StanfordCoreNLPServer implements Runnable {
         "openie.strip_entailments", "true");  // these are large to serialize, so ignore them
     this.serverExecutor = Executors.newFixedThreadPool(ArgumentParser.threads);
     this.corenlpExecutor = Executors.newFixedThreadPool(ArgumentParser.threads);
+    this.annotation_cache = new AnnotationCache(ArgumentParser.cache);
+    log("    Annotation cache size: " + ArgumentParser.cache);
 
     // Generate and write a shutdown key
     String tmpDir = System.getProperty("java.io.tmpdir");
@@ -212,8 +220,8 @@ public class StanfordCoreNLPServer implements Runnable {
         text = text.replaceAll("%(?![0-9a-fA-F]{2})", "%25");
         text = text.replaceAll("\\+", "%2B");
         text = URLDecoder.decode(text, encoding).trim();
-        // Read the annotation
-        Annotation annotation = new Annotation(text);
+        // Read the annotation (from cache if available)
+        Annotation annotation = this.annotation_cache.get(text);
         // Set the date (if provided)
         if (date != null) {
           annotation.set(CoreAnnotations.DocDateAnnotation.class, date);
@@ -740,9 +748,10 @@ public class StanfordCoreNLPServer implements Runnable {
         try {
           // Get the document
           Annotation doc = getDocument(props, httpExchange);
-          if (!doc.containsKey(CoreAnnotations.SentencesAnnotation.class)) {
+          if (!hasSentenceAnnotation(doc, CoreAnnotations.TokensAnnotation.class)) {
             StanfordCoreNLP pipeline = mkStanfordCoreNLP(props);
             pipeline.annotate(doc);
+            annotation_cache.add(doc);
           }
 
           // Construct the matcher
@@ -862,11 +871,11 @@ public class StanfordCoreNLPServer implements Runnable {
         try {
           // Get the document
           Annotation doc = getDocument(props, httpExchange);
-          if (!doc.containsKey(CoreAnnotations.SentencesAnnotation.class)) {
+          if (!hasSentenceAnnotation(doc, SemanticGraphCoreAnnotations.EnhancedPlusPlusDependenciesAnnotation.class)) {
             StanfordCoreNLP pipeline = mkStanfordCoreNLP(props);
             pipeline.annotate(doc);
+            annotation_cache.add(doc);
           }
-
           // Construct the matcher
           // (get the pattern)
           if (!params.containsKey("pattern")) {
@@ -980,9 +989,10 @@ public class StanfordCoreNLPServer implements Runnable {
         try {
           // Get the document
           Annotation doc = getDocument(props, httpExchange);
-          if ( ! doc.containsKey(CoreAnnotations.SentencesAnnotation.class)) {
+          if (!hasSentenceAnnotation(doc, TreeCoreAnnotations.TreeAnnotation.class)) {
             StanfordCoreNLP pipeline = mkStanfordCoreNLP(props);
             pipeline.annotate(doc);
+            annotation_cache.add(doc);
           }
 
           // Construct the matcher
@@ -1048,6 +1058,30 @@ public class StanfordCoreNLPServer implements Runnable {
       httpExchange.getResponseBody().write(response);
       httpExchange.close();
     }
+  }
+  
+  /**
+   * Check if a document has a specific sentence annotation.
+   * @param <VALUE> value type for key
+   * @param doc annotation to query
+   * @param key class of sentence level annotation.
+   * @return returns true if and only if doc contains a sentence level annotation matching key.
+   */
+  private static <VALUE> boolean hasSentenceAnnotation(Annotation doc, Class<? extends Key<VALUE>> key) {
+	  
+	  // check that document has any sentence annotations.
+	  if(!doc.containsKey(CoreAnnotations.SentencesAnnotation.class)) {
+		  return false;
+	  }
+	  
+	  // ensure all sentences have requested annotation type
+	  List<CoreMap> sentence_annotations = doc.get(CoreAnnotations.SentencesAnnotation.class);
+	  for(CoreMap sentence : sentence_annotations) {
+		  if(!sentence.containsKey(key)) {
+			  return false;
+		  }
+	  }
+	  return true;
   }
 
 
